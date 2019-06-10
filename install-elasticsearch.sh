@@ -90,9 +90,40 @@ done
 # Install Oracle Java
 install_java()
 {
-       add-apt-repository ppa:openjdk-r/ppa
-    apt-get -q -y update  > /dev/null
-    apt-get -q -y install openjdk-8-jdk > /dev/null
+    if [ -f "jdk-8u201-linux-x64.tar.gz" ];
+    then
+        log "Java already downloaded"
+        return
+    fi
+    
+    log "Installing Java"
+    RETRY=0
+    MAX_RETRY=5
+    while [ $RETRY -lt $MAX_RETRY ]; do
+        log "Retry $RETRY: downloading jdk-8u201-linux-x64.tar.gz"
+        wget --no-check-certificate --no-cookies --header "Cookie: oraclelicense=accept-securebackup-cookie" https://download.oracle.com/otn-pub/java/jdk/8u201-b09/42970487e3af4f5aa5bca3f542482c60/jdk-8u201-linux-x64.tar.gz
+        if [ $? -ne 0 ]; then
+            let RETRY=RETRY+1
+        else
+            break
+        fi
+    done
+    if [ $RETRY -eq $MAX_RETRY ]; then
+        log "Failed to download jdk-8u201-linux-x64.tar.gz"
+        exit 1
+    fi
+    
+    tar xzf jdk-8u201-linux-x64.tar.gz -C /var/lib
+    export JAVA_HOME=/var/lib/jdk1.8.0_201
+    export PATH=$PATH:$JAVA_HOME/bin
+    log "JAVA_HOME: $JAVA_HOME"
+    log "PATH: $PATH"
+    
+    java -version
+    if [ $? -ne 0 ]; then
+        log "Java installation failed"
+        exit 1
+    fi
 }
 
 install_es()
@@ -108,78 +139,10 @@ install_es()
     
     if [ ${IS_DATA_NODE} -eq 0 ]; 
     then
-        install_kibana() {
-    # default - ES 2.3.1
-	kibana_url="https://artifacts.elastic.co/downloads/kibana/kibana-6.7.2-linux-x86_64.tar.gz"
-	
-	
-	if [[ "${ES_VERSION}" == "2.2.2" ]]; 
-    then
-		kibana_url="https://download.elastic.co/kibana/kibana/kibana-4.4.2-linux-x64.tar.gz"
-	fi
-    
-    if [[ "${ES_VERSION}" == "2.1.2" ]]; 
-    then
-        kibana_url="https://download.elastic.co/kibana/kibana/kibana-4.3.3-linux-x64.tar.gz"
-    fi
-    
-    if [[ "${ES_VERSION}" == "1.7.5" ]]; 
-    then
-        kibana_url="https://download.elastic.co/kibana/kibana/kibana-4.1.6-linux-x64.tar.gz"
-    fi
-    
-    groupadd -g 999 kibana
-    useradd -u 999 -g 999 kibana
-
-    mkdir -p /opt/kibana
-    curl -s -o kibana.tar.gz ${kibana_url}
-    tar xvf kibana.tar.gz -C /opt/kibana/ --strip-components=1 > /dev/null
-
-    chown -R kibana: /opt/kibana
-    mv /opt/kibana/config/kibana.yml /opt/kibana/config/kibana.yml.bak
-
-    if [[ "${ES_VERSION}" == \2* ]];
-    then
-        echo "elasticsearch.url: \"$ELASTICSEARCH_URL\"" >> /opt/kibana/config/kibana.yml
-    else
-        cat /opt/kibana/config/kibana.yml.bak | sed "s|http://localhost:9200|${ELASTICSEARCH_URL}|" >> /opt/kibana/config/kibana.yml 
-    fi
-
-    # install the marvel plugin for 2.x
-    if [ ${INSTALL_MARVEL} -ne 0 ];
-    then
-		if [[ "${ES_VERSION}" == \2* ]];
-        then
-            /opt/kibana/bin/kibana plugin --install elasticsearch/marvel/${ES_VERSION}
-        fi
-
-        # for 1.x marvel is installed only within the cluster, not on the kibana node 
-    fi
-    
-    # install the sense plugin for 2.x
-    if [ ${INSTALL_SENSE} -ne 0 ];
-    then
-        if [[ "${ES_VERSION}" == \2* ]];
-        then
-            /opt/kibana/bin/kibana plugin --install elastic/sense
-        fi
-                
-        # for 1.x sense is not supported 
-    fi
-
-# Add upstart task and start kibana service
-cat << EOF > /etc/init/kibana.conf
-    # kibana
-    description "Elasticsearch Kibana Service"
-
-    start on starting
-    script
-        /opt/kibana/bin/kibana
-    end script
-EOF
-
-    chmod +x /etc/init/kibana.conf
-    service kibana start
+        apt-get install -y kibana
+        pushd /usr/share/kibana/
+        bin/kibana-plugin install x-pack
+        popd
     fi
 }
 
@@ -282,32 +245,9 @@ start_service()
     fi
 }
 
-if [ "${UID}" -ne 0 ];
-then
-    error "You must be root to run this script."
-fi
-
-ES_VERSION="2.3.1"
-INSTALL_MARVEL=0
-INSTALL_SENSE=0
-ELASTICSEARCH_URL="http://localhost:9200"
-
-while getopts :v:t:msh optname; do
-  case ${optname} in
-    v) ES_VERSION=${OPTARG};;
-    m) INSTALL_MARVEL=1;;
-    s) INSTALL_SENSE=1;;
-    t) ELASTICSEARCH_URL=${OPTARG};; 
-    h) help; exit 1;;
-   \?) help; error "Option -${OPTARG} not supported.";;
-    :) help; error "Option -${OPTARG} requires an argument.";;
-  esac
-done
-
 log "starting elasticsearch setup"
 
 install_java
-install_kibana
 install_es
 configure_es
 configure_system
