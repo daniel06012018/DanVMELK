@@ -1,6 +1,7 @@
 # Elasticsearch, X-Pack, VM Scale Sets and Managed Disks
 
-<a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fgithub.com%2Fdaniel06012018%2FDanVMELK%2Fblob%2Fmaster%2Fazuredeploy.json" target="_blank">
+<a h
+ref="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fdaniel06012018%2FDanVMELK%2Fmaster%2Fazuredeploy.json" target="_blank">
     <img src="http://azuredeploy.net/deploybutton.png"/>
 </a>
 
