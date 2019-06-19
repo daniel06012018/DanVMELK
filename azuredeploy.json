@@ -114,16 +114,12 @@ install_es()
     echo "deb https://artifacts.elastic.co/packages/7.1.1/apt stable main" | tee -a /etc/apt/sources.list.d/elastic-7.1.1.list    
     apt-get update -y 
     apt-get install -y elasticsearch
-    pushd /usr/share/elasticsearch/
-    bin/elasticsearch-plugin install x-pack --batch
-    popd
-    
+      
     if [ ${IS_DATA_NODE} -eq 0 ]; 
     then
         apt-get install -y kibana
         pushd /usr/share/kibana/
-        bin/kibana-plugin install x-pack
-        popd
+       
     fi
 }
 
@@ -173,7 +169,6 @@ configure_system()
         IP_ADDRESS=$(ip route get 8.8.8.8 | awk -F"src " 'NR==1{split($2,a," ");print a[1]}')
         echo "server.host: \"$IP_ADDRESS\"" >> /etc/kibana/kibana.yml
         echo "elasticsearch.url: \"http://$IP_ADDRESS:9200\"" >> /etc/kibana/kibana.yml
-        echo "xpack.security.enabled: false" >> /etc/kibana/kibana.yml
         chown -R kibana:kibana /usr/share/kibana
     else
         # data disk
