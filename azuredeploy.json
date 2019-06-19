@@ -1,465 +1,239 @@
+#!/bin/bash
+
+# The MIT License (MIT)
+#
+# Copyright (c) 2015 Microsoft Azure
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+# 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+#
+
+help()
 {
-    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json",
-    "contentVersion": "1.0.0.0",
-    "parameters": {
-        "clusterName": {
-            "type": "string",
-            "defaultValue": "es-azure",
-            "metadata": {
-                "description": "The name of the cluster."
-            }
-        },
-        "vmssName": {
-            "type": "string",
-            "metadata": {
-                "description": "String used as a base for naming resources. Must be 3-61 characters in length and globally unique across Azure. A hash is prepended to this string for some resources, and resource-specific information is appended."
-            },
-            "maxLength": 61
-        },
-        "instanceCount": {
-            "type": "int",
-            "metadata": {
-                "description": "Number of VM instances (200 or less)."
-            },
-            "defaultValue": 2,
-            "maxValue": 200
-        },
-        "adminUsername": {
-            "type": "string",
-            "metadata": {
-                "description": "Admin username on all VMs."
-            }
-        },
-        "adminPassword": {
-            "type": "securestring",
-            "metadata": {
-                "description": "Admin password for all VMs."
-            }
-        },
-        "location": {
-            "type": "string",
-            "defaultValue": "[resourceGroup().location]",
-            "metadata": {
-                "description": "Location for all resources."
-            }
-        },
-        "_artifactsLocation": {
-            "type": "string",
-            "defaultValue": "https://raw.githubusercontent.com/daniel06012018/DanVMELK/master",
-            "metadata": {
-                "description": "Change this value to your repo name if deploying from a fork"
-            }
-        },
-        "_artifactsLocationSasToken": {
-            "type": "securestring",
-            "metadata": {
-                "description": "Auto-generated token to access _artifactsLocation"
-            },
-            "defaultValue": ""
-        }
-    },
-    "variables": {
-        "storageAccountType": "Premium_LRS",
-        "addressPrefix": "10.0.0.0/16",
-        "subnetPrefix": "10.0.0.0/24",
-        "namingInfix": "[toLower(parameters('vmssName'))]",
-        "domainNameLabel": "[variables('namingInfix')]",
-        "virtualNetworkName": "[concat(variables('namingInfix'), '-vnet')]",
-        "publicIpAddressName": "[concat(variables('namingInfix'), '-pip')]",
-        "publicIpAddressId": "[resourceId('Microsoft.Network/publicIPAddresses', variables('publicIpAddressName'))]",
-        "loadBalancerName": "[concat(variables('namingInfix'), '-lb')]",
-        "loadBalancerId": "[resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName'))]",
-        "backendPoolName": "[concat(variables('namingInfix'), '-bepool')]",
-        "nicName": "[concat(variables('namingInfix'), '-nic')]",
-        "masterName": "[concat(variables('namingInfix'), '-master')]",
-        "availabilitySetName": "[concat(variables('namingInfix'), '-master-set')]",
-        "nsgName": "[concat(variables('namingInfix'), '-master-nsg')]",
-        "ipConfigName": "[concat(variables('namingInfix'), '-ipconfig')]",
-        "frontendIpConfigId": "[concat(variables('loadBalancerId'),'/frontendIPConfigurations/loadBalancerFrontEnd')]",
-        "loadBalancerPoolId": "[concat(variables('loadBalancerId'),'/backendAddressPools/', variables('backendPoolName'))]",
-        "loadBalancerProbeId": "[concat(variables('loadBalancerId'),'/probes/tcpProbe')]",
-        "sshProbeId": "[concat(variables('loadBalancerId'),'/probes/sshProbe')]",
-        "subnetName": "[concat(variables('namingInfix'), '-subnet')]",
-        "masterSize": "Standard_DS2_v2",
-        "vmSku": "Standard_DS2_v2",
-        "imageReference": {
-            "publisher": "Canonical",
-            "offer": "UbuntuServer",
-            "sku": "18.04-LTS",
-            "version": "latest"
-        },
-        "elasticSetupScriptUrl": "[concat(parameters('_artifactsLocation'), '/install-elasticsearch.sh', parameters('_artifactsLocationSasToken'))]",
-        "diskSetupScriptUrl": "[concat(parameters('_artifactsLocation'), '/vm-disk-utils-0.1.sh', parameters('_artifactsLocationSasToken'))]"
-    },
-    "resources": [
-        {
-            "type": "Microsoft.Network/networkSecurityGroups",
-            "name": "[variables('nsgName')]",
-            "apiVersion": "2018-07-01",
-            "location": "[parameters('location')]",
-            "properties": {
-                "securityRules": [
-                    {
-                        "name": "ssh",
-                        "properties": {
-                            "description": "Allows inbound ssh traffic",
-                            "protocol": "Tcp",
-                            "sourcePortRange": "*",
-                            "destinationPortRange": "22",
-                            "sourceAddressPrefix": "*",
-                            "destinationAddressPrefix": "*",
-                            "access": "Allow",
-                            "priority": 100,
-                            "direction": "Inbound"
-                        }
-                    },
-                    {
-                        "name": "Elasticsearch",
-                        "properties": {
-                            "description": "Allows inbound HTTP traffic from anyone",
-                            "protocol": "Tcp",
-                            "sourcePortRange": "*",
-                            "destinationPortRange": "5601",
-                            "sourceAddressPrefix": "*",
-                            "destinationAddressPrefix": "*",
-                            "access": "Allow",
-                            "priority": 200,
-                            "direction": "Inbound"
-                        }
-                    }
-                ]
-            }
-        },
-        {
-            "type": "Microsoft.Network/virtualNetworks",
-            "name": "[variables('virtualNetworkName')]",
-            "location": "[parameters('location')]",
-            "apiVersion": "2018-07-01",
-            "properties": {
-                "addressSpace": {
-                    "addressPrefixes": [
-                        "[variables('addressPrefix')]"
-                    ]
-                },
-                "subnets": [
-                    {
-                        "name": "[variables('subnetName')]",
-                        "properties": {
-                            "addressPrefix": "[variables('subnetPrefix')]"
-                        }
-                    }
-                ]
-            }
-        },
-        {
-            "type": "Microsoft.Network/publicIPAddresses",
-            "name": "[variables('publicIpAddressName')]",
-            "location": "[parameters('location')]",
-            "apiVersion": "2018-07-01",
-            "properties": {
-                "publicIPAllocationMethod": "Dynamic",
-                "dnsSettings": {
-                    "domainNameLabel": "[variables('domainNameLabel')]"
-                }
-            }
-        },
-        {
-            "type": "Microsoft.Network/loadBalancers",
-            "name": "[variables('loadBalancerName')]",
-            "location": "[parameters('location')]",
-            "apiVersion": "2018-07-01",
-            "dependsOn": [
-                "[concat('Microsoft.Network/publicIPAddresses/', variables('publicIpAddressName'))]"
-            ],
-            "properties": {
-                "frontendIPConfigurations": [
-                    {
-                        "name": "LoadBalancerFrontEnd",
-                        "properties": {
-                            "publicIPAddress": {
-                                "id": "[variables('publicIpAddressId')]"
-                            }
-                        }
-                    }
-                ],
-                "backendAddressPools": [
-                    {
-                        "name": "[variables('backendPoolName')]"
-                    }
-                ],
-                "loadBalancingRules": [
-                    {
-                        "name": "LBRule",
-                        "properties": {
-                            "frontendIPConfiguration": {
-                                "id": "[variables('frontendIpConfigId')]"
-                            },
-                            "backendAddressPool": {
-                                "id": "[variables('loadBalancerPoolId')]"
-                            },
-                            "protocol": "Tcp",
-                            "frontendPort": 5601,
-                            "backendPort": 5601,
-                            "enableFloatingIP": false,
-                            "idleTimeoutInMinutes": 5,
-                            "probe": {
-                                "id": "[variables('loadBalancerProbeId')]"
-                            }
-                        }
-                    },
-                    {
-                        "name": "ssh",
-                        "properties": {
-                            "frontendIPConfiguration": {
-                                "id": "[variables('frontendIpConfigId')]"
-                            },
-                            "backendAddressPool": {
-                                "id": "[variables('loadBalancerPoolId')]"
-                            },
-                            "protocol": "Tcp",
-                            "frontendPort": 22,
-                            "backendPort": 22,
-                            "enableFloatingIP": false,
-                            "idleTimeoutInMinutes": 5,
-                            "probe": {
-                                "id": "[variables('sshProbeId')]"
-                            }
-                        }
-                    }
-                ],
-                "probes": [
-                    {
-                        "name": "tcpProbe",
-                        "properties": {
-                            "protocol": "Tcp",
-                            "port": 9200,
-                            "intervalInSeconds": 30,
-                            "numberOfProbes": 2
-                        }
-                    },
-                    {
-                        "name": "sshProbe",
-                        "properties": {
-                            "protocol": "Tcp",
-                            "port": 22,
-                            "intervalInSeconds": 30,
-                            "numberOfProbes": 2
-                        }
-                    }
-                ]
-            }
-        },
-        {
-            "type": "Microsoft.Compute/availabilitySets",
-            "name": "[variables('availabilitySetName')]",
-            "location": "[parameters('location')]",
-            "apiVersion": "2018-06-01",
-            "properties": {
-                "platformUpdateDomainCount": 3,
-                "platformFaultDomainCount": 3
-            },
-            "sku": {
-              "name": "Aligned"
-            }
-        },
-        {
-            "type": "Microsoft.Network/networkInterfaces",
-            "name": "[concat(variables('nicName'), copyindex())]",
-            "location": "[parameters('location')]",
-            "apiVersion": "2018-07-01",
-            "dependsOn": [
-                "[resourceId('Microsoft.Network/publicIPAddresses', variables('publicIpAddressName'))]",
-                "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
-            ],
-            "copy": {
-                "name": "masterNodesNicLoop",
-                "count": 3
-            },
-            "properties": {
-                "ipConfigurations": [
-                    {
-                        "name": "ipconfigmaster",
-                        "properties": {
-                            "privateIPAllocationMethod": "Static",
-                            "privateIPAddress": "[concat('10.0.0.1', copyindex())]",
-                            "subnet": {
-                                "id": "[concat(resourceId('Microsoft.Network/virtualNetworks/', variables('virtualNetworkName')), '/subnets/', variables('subnetName'))]"
-                            },
-                            "loadBalancerBackendAddressPools": [
-                                {
-                                    "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName')), '/backendAddressPools/', variables('backendPoolName'))]"
-                                }
-                            ]
-                        }
-                    }
-                ],
-                "networkSecurityGroup": {
-                    "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
-                }
-            }
-        },
-        {
-            "type": "Microsoft.Compute/virtualMachines",
-            "name": "[concat(variables('masterName'), copyindex())]",
-            "location": "[parameters('location')]",
-            "apiVersion": "2018-06-01",
-            "copy": {
-                "name": "masterVmLoop",
-                "count": 3
-            },
-            "dependsOn": [
-                "[concat('Microsoft.Network/networkInterfaces/', variables('nicName'), copyindex())]",
-                "[concat('Microsoft.Compute/availabilitySets/', variables('availabilitySetName'))]"
-            ],
-            "properties": {
-                "availabilitySet": {
-                    "id": "[resourceId('Microsoft.Compute/availabilitySets', variables('availabilitySetName'))]"
-                },
-                "hardwareProfile": {
-                    "vmSize": "[variables('masterSize')]"
-                },
-                "osProfile": {
-                    "computerName": "[concat('master-vm', copyIndex())]",
-                    "adminUsername": "[parameters('adminUsername')]",
-                    "adminPassword": "[parameters('adminPassword')]"
-                },
-                "storageProfile": {
-                    "imageReference": "[variables('imageReference')]",
-                    "osDisk": {
-                        "createOption": "FromImage",
-                        "caching": "ReadWrite",
-                        "managedDisk": {
-                            "storageAccountType": "[variables('storageAccountType')]"
-                        }
-                    }
-                },
-                "networkProfile": {
-                    "networkInterfaces": [
-                        {
-                            "id": "[resourceId('Microsoft.Network/networkInterfaces',concat(variables('nicName'), copyindex()))]"
-                        }
-                    ]
-                }
-            },
-            "resources": [
-                {
-                    "type": "Microsoft.Compute/virtualMachines/extensions",
-                    "name": "[concat(variables('masterName'), copyindex(), '/installelasticsearch')]",
-                    "apiVersion": "2017-03-30",
-                    "location": "[parameters('location')]",
-                    "dependsOn": [
-                        "[concat('Microsoft.Compute/virtualMachines/', variables('masterName'), copyindex())]"
-                    ],
-                    "properties": {
-                        "publisher": "Microsoft.Azure.Extensions",
-                        "type": "CustomScript",
-                        "typeHandlerVersion": "2.0",
-                        "autoUpgradeMinorVersion": true,
-                        "settings": {
-                            "fileUris": [
-                                "[variables('elasticSetupScriptUrl')]",
-                                "[variables('diskSetupScriptUrl')]"
-                            ],
-                            "commandToExecute": "[concat('bash install-elasticsearch.sh -m -n ', parameters('clusterName'))]"
-                        }
-                    }
-                }
-            ]
-        },
-        {
-            "type": "Microsoft.Compute/virtualMachineScaleSets",
-            "name": "[variables('namingInfix')]",
-            "location": "[parameters('location')]",
-            "apiVersion": "2018-06-01",
-            "dependsOn": [
-                "masterVmLoop",
-                "[concat('Microsoft.Network/virtualNetworks/', variables('virtualNetworkName'))]"
-            ],
-            "sku": {
-                "name": "[variables('vmSku')]",
-                "tier": "Standard",
-                "capacity": "[parameters('instanceCount')]"
-            },
-            "properties": {
-                "largeScaleEnabled": "true",
-                "overprovision": "true",
-                "upgradePolicy": {
-                    "mode": "Manual"
-                },
-                "virtualMachineProfile": {
-                    "storageProfile": {
-                        "osDisk": {
-                            "createOption": "FromImage"
-                        },
-                        "imageReference": "[variables('imageReference')]",
-                        "dataDisks": [
-                            {
-                                "lun": 0,
-                                "createOption": "Empty",
-                                "diskSizeGB": 128,
-                                "caching": "ReadWrite",
-                                "managedDisk": {
-                                    "storageAccountType": "[variables('storageAccountType')]"
-                                }
-                            }
-                        ]
-                    },
-                    "osProfile": {
-                        "computerNamePrefix": "[variables('namingInfix')]",
-                        "adminUsername": "[parameters('adminUsername')]",
-                        "adminPassword": "[parameters('adminPassword')]"
-                    },
-                    "networkProfile": {
-                        "networkInterfaceConfigurations": [
-                            {
-                                "name": "[variables('nicName')]",
-                                "properties": {
-                                    "primary": true,
-                                    "ipConfigurations": [
-                                        {
-                                            "name": "[variables('ipConfigName')]",
-                                            "properties": {
-                                                "subnet": {
-                                                    "id": "[concat(resourceId('Microsoft.Network/virtualNetworks/', variables('virtualNetworkName')), '/subnets/', variables('subnetName'))]"
-                                                }
-                                            }
-                                        }
-                                    ]
-                                }
-                            }
-                        ]
-                    },
-                    "extensionProfile": {
-                        "extensions": [
-                            {
-                                "name": "elasticsearch",
-                                "properties": {
-                                    "publisher": "Microsoft.Azure.Extensions",
-                                    "type": "CustomScript",
-                                    "typeHandlerVersion": "2.0",
-                                    "autoUpgradeMinorVersion": true,
-                                    "settings": {
-                                        "fileUris": [
-                                            "[variables('elasticSetupScriptUrl')]"
-                                        ],
-                                        "commandToExecute": "[concat('bash install-elasticsearch.sh -n ', parameters('clusterName'))]"
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                }
-            }
-        }
-    ],
-    "outputs": {
-        "kibana-url": {
-            "type": "string",
-            "value": "[concat('http://', reference(resourceId('Microsoft.Network/publicIPAddresses', variables('publicIpAddressName'))).dnsSettings.fqdn, ':5601/app/monitoring#/elasticsearch')]"
-        },
-        "ssh-connection": {
-            "type": "string",
-            "value": "[concat('ssh ', parameters('adminUsername'), '@', reference(resourceId('Microsoft.Network/publicIPAddresses', variables('publicIpAddressName'))).dnsSettings.fqdn)]"
-        }
-    }
+    echo "This script installs Elasticsearch on Ubuntu"
+    echo "Parameters:"
+    echo "  -n elasticsearch cluster name"
+    echo "  -m configure as master node (default: off)"
+    echo "  -h view this help content"
 }
+
+# Log method to control/redirect log output
+log()
+{
+    echo "$1"
+}
+
+log "Begin execution of Elasticsearch script extension on ${HOSTNAME}"
+
+if [ "${UID}" -ne 0 ];
+then
+    log "Script executed without root permissions"
+    echo "You must be root to run this program." >&2
+    exit 3
+fi
+
+# TEMP FIX - Re-evaluate and remove when possible
+# This is an interim fix for hostname resolution in current VM
+grep -q "${HOSTNAME}" /etc/hosts
+if [ $? == 0 ]
+then
+  echo "${HOSTNAME} found in /etc/hosts"
+else
+  echo "${HOSTNAME} not found in /etc/hosts"
+  # Append it to the hosts file if not there
+  echo "127.0.0.1 ${HOSTNAME}" >> /etc/hosts
+  log "hostname ${HOSTNAME} added to /etc/hosts"
+fi
+
+#Script Parameters
+CLUSTER_NAME="es-azure"
+ES_VERSION="5.1.2"
+IS_DATA_NODE=1
+
+#Loop through options passed
+while getopts :n:mh optname; do
+  log "Option $optname set with value ${OPTARG}"
+  case $optname in
+    n) #set cluster name
+      CLUSTER_NAME=${OPTARG}
+      ;;
+    m) #set master mode
+      IS_DATA_NODE=0
+      ;;
+    h) #show help
+      help
+      exit 2
+      ;;
+    \?) #unrecognized option - show help
+      echo -e \\n"Option -${BOLD}$OPTARG${NORM} not allowed."
+      help
+      exit 2
+      ;;
+  esac
+done
+
+# Install Oracle Java
+install_java()
+{
+    java -version
+if [ $? -ne 0 ]
+    then
+        # Installing Java 8 if it's not installed
+        sudo apt-get install openjdk-8-jre-headless -y
+    # Checking if java installed is less than version 7. If yes, installing Java 7. As logstash & Elasticsearch require Java 7 or later.
+    elif [ "`java -version 2> /tmp/version && awk '/version/ { gsub(/"/, "", $NF); print ( $NF < 1.8 ) ? "YES" : "NO" }' /tmp/version`" == "YES" ]
+        then
+            sudo apt-get install openjdk-8-jre-headless -y
+	fi     
+    export JAVA_HOME=/usr/lib/jvm/default-java
+    export PATH=$PATH:$JAVA_HOME/bin
+    log "JAVA_HOME: $JAVA_HOME"
+    log "PATH: $PATH"
+    
+    }
+
+install_es()
+{
+    wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | apt-key add -
+    apt-get install apt-transport-https
+    echo "deb https://artifacts.elastic.co/packages/5.x/apt stable main" | tee -a /etc/apt/sources.list.d/elastic-5.x.list    
+    apt-get update -y 
+    apt-get install -y elasticsearch
+    pushd /usr/share/elasticsearch/
+    bin/elasticsearch-plugin install x-pack --batch
+    popd
+    
+    if [ ${IS_DATA_NODE} -eq 0 ]; 
+    then
+        apt-get install -y kibana
+        pushd /usr/share/kibana/
+        bin/kibana-plugin install x-pack
+        popd
+    fi
+}
+
+configure_es()
+{
+	log "Update configuration"
+	mv /etc/elasticsearch/elasticsearch.yml /etc/elasticsearch/elasticsearch.bak
+	echo "cluster.name: $CLUSTER_NAME" >> /etc/elasticsearch/elasticsearch.yml
+	echo "node.name: ${HOSTNAME}" >> /etc/elasticsearch/elasticsearch.yml
+	echo "discovery.zen.minimum_master_nodes: 2" >> /etc/elasticsearch/elasticsearch.yml
+	echo 'discovery.zen.ping.unicast.hosts: ["10.0.0.10", "10.0.0.11", "10.0.0.12"]' >> /etc/elasticsearch/elasticsearch.yml
+	echo "network.host: _site_" >> /etc/elasticsearch/elasticsearch.yml
+	echo "bootstrap.memory_lock: true" >> /etc/elasticsearch/elasticsearch.yml
+        echo "xpack.security.enabled: false" >> /etc/elasticsearch/elasticsearch.yml
+
+	if [ ${IS_DATA_NODE} -eq 1 ]; then
+	    echo "node.master: false" >> /etc/elasticsearch/elasticsearch.yml
+	    echo "node.data: true" >> /etc/elasticsearch/elasticsearch.yml
+	else
+        echo "node.master: true" >> /etc/elasticsearch/elasticsearch.yml
+        echo "node.data: false" >> /etc/elasticsearch/elasticsearch.yml
+	fi
+}
+
+configure_system()
+{
+	echo "options timeout:1 attempts:5" >> /etc/resolvconf/resolv.conf.d/head
+	resolvconf -u
+	ES_HEAP=`free -m |grep Mem | awk '{if ($2/2 >31744)  print 31744;else printf "%.0f", $2/2;}'`
+	echo "ES_JAVA_OPTS=\"-Xms${ES_HEAP}m -Xmx${ES_HEAP}m\"" >> /etc/default/elasticsearch
+    echo "JAVA_HOME=$JAVA_HOME" >> /etc/default/elasticsearch
+    echo 'MAX_OPEN_FILES=65536' >> /etc/default/elasticsearch
+    echo 'MAX_LOCKED_MEMORY=unlimited' >> /etc/default/elasticsearch
+   
+    #https://www.elastic.co/guide/en/elasticsearch/reference/current/setting-system-settings.html#systemd
+    mkdir -p /etc/systemd/system/elasticsearch.service.d
+    touch /etc/systemd/system/elasticsearch.service.d/override.conf
+    echo '[Service]' >> /etc/systemd/system/elasticsearch.service.d/override.conf
+    echo 'LimitMEMLOCK=infinity' >> /etc/systemd/system/elasticsearch.service.d/override.conf
+    sudo systemctl daemon-reload
+   
+    chown -R elasticsearch:elasticsearch /usr/share/elasticsearch
+    
+    if [ ${IS_DATA_NODE} -eq 0 ]; 
+    then
+        # Kibana    
+        IP_ADDRESS=$(ip route get 8.8.8.8 | awk -F"src " 'NR==1{split($2,a," ");print a[1]}')
+        echo "server.host: \"$IP_ADDRESS\"" >> /etc/kibana/kibana.yml
+        echo "elasticsearch.url: \"http://$IP_ADDRESS:9200\"" >> /etc/kibana/kibana.yml
+        echo "xpack.security.enabled: false" >> /etc/kibana/kibana.yml
+        chown -R kibana:kibana /usr/share/kibana
+    else
+        # data disk
+        DATA_DIR="/datadisks/disk1"
+        if ! [ -f "vm-disk-utils-0.1.sh" ]; 
+        then
+            DOWNLOAD_SCRIPT="https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/shared_scripts/ubuntu/vm-disk-utils-0.1.sh"
+            log "Disk setup script not found in `pwd`, download from $DOWNLOAD_SCRIPT"
+            wget -q $DOWNLOAD_SCRIPT
+        fi
+        
+        bash ./vm-disk-utils-0.1.sh
+        if [ $? -eq 0 ] && [ -d "$DATA_DIR" ];
+        then
+            log "Disk setup successful, using $DATA_DIR"
+            chown -R elasticsearch:elasticsearch $DATA_DIR
+            echo "DATA_DIR=$DATA_DIR" >> /etc/default/elasticsearch
+        else
+            log "Disk setup failed, using default data storage location"
+        fi
+    fi
+}
+
+start_service()
+{
+	log "Starting Elasticsearch on ${HOSTNAME}"
+    systemctl daemon-reload
+    systemctl enable elasticsearch.service
+    systemctl start elasticsearch.service
+    sleep 60
+    
+    if [ `systemctl is-failed elasticsearch.service` == 'failed' ];
+    then
+        log "Elasticsearch unit failed to start"
+        exit 1
+    fi
+    
+    if [ ${IS_DATA_NODE} -eq 0 ]; 
+    then
+        log "Starting Kibana on ${HOSTNAME}"
+        systemctl enable kibana.service
+        systemctl start kibana.service
+        sleep 10
+    
+        if [ `systemctl is-failed kibana.service` == 'failed' ];
+        then
+            log "Kibana unit failed to start"
+            exit 1
+        fi    
+    fi
+}
+
+log "starting elasticsearch setup"
+
+install_java
+install_es
+configure_es
+configure_system
+start_service
+
+log "completed elasticsearch setup"
+
+exit 0
