@@ -118,8 +118,7 @@ install_es()
     if [ ${IS_DATA_NODE} -eq 0 ]; 
     then
         apt-get install -y kibana
-        pushd /usr/share/kibana/
-       
+           
     fi
 }
 
@@ -146,14 +145,7 @@ configure_es()
 
 configure_system()
 {
-	echo "options timeout:1 attempts:5" >> /etc/resolvconf/resolv.conf.d/head
-	resolvconf -u
-	ES_HEAP=`free -m |grep Mem | awk '{if ($2/2 >31744)  print 31744;else printf "%.0f", $2/2;}'`
-	echo "ES_JAVA_OPTS=\"-Xms${ES_HEAP}m -Xmx${ES_HEAP}m\"" >> /etc/default/elasticsearch
-    echo "JAVA_HOME=$JAVA_HOME" >> /etc/default/elasticsearch
-    echo 'MAX_OPEN_FILES=65536' >> /etc/default/elasticsearch
-    echo 'MAX_LOCKED_MEMORY=unlimited' >> /etc/default/elasticsearch
-   
+	   
     #https://www.elastic.co/guide/en/elasticsearch/reference/current/setting-system-settings.html#systemd
     mkdir -p /etc/systemd/system/elasticsearch.service.d
     touch /etc/systemd/system/elasticsearch.service.d/override.conf
@@ -161,8 +153,7 @@ configure_system()
     echo 'LimitMEMLOCK=infinity' >> /etc/systemd/system/elasticsearch.service.d/override.conf
     sudo systemctl daemon-reload
    
-    chown -R elasticsearch:elasticsearch /usr/share/elasticsearch
-    
+        
     if [ ${IS_DATA_NODE} -eq 0 ]; 
     then
         # Kibana    
