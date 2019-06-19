@@ -73,7 +73,6 @@ done
 # Install Oracle Java
 install_java()
 {
-
     java -version
 if [ $? -ne 0 ]
     then
@@ -89,8 +88,7 @@ if [ $? -ne 0 ]
     log "JAVA_HOME: $JAVA_HOME"
     log "PATH: $PATH"
     
-    fi
-}
+    }
 
 install_es()
 
