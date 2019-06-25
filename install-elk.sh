@@ -77,17 +77,12 @@ install_java()
 if [ $? -ne 0 ]
     then
         # Installing Java 8 if it's not installed
-        sudo apt-get install openjdk-8-jre-headless -y
+        sudo apt-get install default-jdk -y
     # Checking if java installed is less than version 7. If yes, installing Java 7. As logstash & Elasticsearch require Java 7 or later.
     elif [ "`java -version 2> /tmp/version && awk '/version/ { gsub(/"/, "", $NF); print ( $NF < 1.8 ) ? "YES" : "NO" }' /tmp/version`" == "YES" ]
         then
-            sudo apt-get install openjdk-8-jre-headless -y
-	fi     
-    export JAVA_HOME=/usr/lib/jvm/default-java
-    export PATH=$PATH:$JAVA_HOME/bin
-    log "JAVA_HOME: $JAVA_HOME"
-    log "PATH: $PATH"
-    
+            sudo apt-get install default-jdk -y
+	fi       
     }
 
 install_es()
