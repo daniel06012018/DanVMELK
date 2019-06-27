@@ -40,7 +40,7 @@ fi
 
 #Script Parameters
 CLUSTER_NAME="es-azure"
-ES_VERSION="7.1.1"
+ES_VERSION="6.8"
 IS_DATA_NODE=1
 
 #Loop through options passed
@@ -68,29 +68,10 @@ done
 # Install Oracle Java
 install_java()
 {
-    if [ -f "jdk-8u201-linux-x64.tar.gz" ];
-    then
-        log "Java already downloaded"
-        return
-    fi
-    
-    log "Installing Java"
-    RETRY=0
-    MAX_RETRY=5
-    while [ $RETRY -lt $MAX_RETRY ]; do
-        log "Retry $RETRY: downloading jdk-8u201-linux-x64.tar.gz"
-        apt-get install default-jdk
-        if [ $? -ne 0 ]; then
-            let RETRY=RETRY+1
-        else
-            break
-        fi
-    done
-    if [ $RETRY -eq $MAX_RETRY ]; then
-        log "Failed to download jdk-8u201-linux-x64.tar.gz"
-        exit 1
-    fi  
-    java -version
+     log "Installing Java"
+   
+        apt-get install default-jdk -y
+        java -version
     if [ $? -ne 0 ]; then
         log "Java installation failed"
         exit 1
@@ -101,7 +82,7 @@ install_es()
 {
     wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | apt-key add -
     apt-get install apt-transport-https
-    echo "deb https://artifacts.elastic.co/packages/7.x/apt stable main" | tee -a /etc/apt/sources.list.d/elastic-7.x.list    
+    echo "deb https://artifacts.elastic.co/packages/6.x/apt stable main" | tee -a /etc/apt/sources.list.d/elastic-6.x.list    
     apt-get update -y 
     apt-get install -y elasticsearch
     pushd /usr/share/elasticsearch/
