@@ -90,7 +90,8 @@ install_es()
     
     if [ ${IS_DATA_NODE} -eq 0 ]; 
     then
-        apt-get install -y kibana
+        apt-get install -y logstash
+	apt-get install -y kibana
         pushd /usr/share/kibana/
         bin/kibana-plugin install x-pack
         popd
